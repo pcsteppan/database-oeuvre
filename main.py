@@ -4,6 +4,7 @@ import time, requests, json, re, sqlite3, os.path, unicodedata, colorgram
 
 conn = None
 c = None
+existing_urls = set()
 
 def download_file(url):
   local_filename = img_dir + url.split('/')[-1].split('=')[-1] + ".jpg"
@@ -30,10 +31,55 @@ def slugify(value, allow_unicode=False):
   value = re.sub(r'[^\w\s-]', '', value).strip().lower()
   return re.sub(r'[-\s]+', '-', value)
 
+def setupDatabase(db_name):
+    global conn
+    if os.path.isfile(db_name):
+        os.remove(db_name)
+    conn = sqlite3.connect(db_name)
+    global c
+    c = conn.cursor()
+    
+
+    commands = [
+        '''
+        CREATE TABLE IF NOT EXISTS Artwork (
+            hex_code VARCHAR(6),
+            image_url VARCHAR(61),
+            year VARCHAR(15),
+            title VARCHAR(400),
+            artist_name VARCHAR(30),
+            FOREIGN KEY(artist_name) REFERENCES artist(name),
+            PRIMARY KEY(image_url)
+        );
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS ArtworkColor (
+            h VARCHAR(3),
+            s VARCHAR(3),
+            l VARCHAR(3),
+            p REAL,
+            artwork_url VARCHAR(61),
+            FOREIGN KEY(artwork_url) REFERENCES artwork(image_url)
+        );
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS Artist (
+            name VARCHAR(30) NULL
+        );
+        '''
+        ]
+
+    for command in commands:
+        c.execute(command) 
+
+def closeDatabase():
+    conn.close()
+
 class Artist():
     artist_catalogue = ""
     color_db_id = 0
     base_url="http://www.the-athenaeum.org"
+    global existing_urls
 
     def __init__(self, name):
         self.name = name
@@ -67,12 +113,17 @@ class Artist():
 
         for p in range(1, page_count):
             time.sleep(0.2)
-            paginated_res = session.get(self.base_url + str.format("{}&p={}", self.url, p))
+            try:
+                paginated_res = session.get(self.base_url + str.format("{}&p={}", self.url, p))
+            except:
+                print('error on page {} of {}'.format(p, self.name))
+                continue
+            
             titles = [title_link.text for title_link in paginated_res.html.find('tr > td:nth-child(2) > div:nth-child(1) > a:nth-child(1)')]
-            thumbnails = [img.attrs.get('src') for img in paginated_res.html.find('tr > td:nth-child(1) > a:nth-child(1) > img:nth-child(1)')]
+            images = [img.attrs.get('src') for img in paginated_res.html.find('tr > td:nth-child(1) > a:nth-child(1) > img:nth-child(1)')]
             descriptions = [description.text for description in paginated_res.html.find('tr > td:nth-child(2)')][1:]
         
-            for item in zip(thumbnails, descriptions, titles):
+            for item in zip(images, descriptions, titles):
                 print("page: {}\t{}/{}".format(p, paintings, non_paintings), end="\r")
                 if "Painting" not in item[1] and "Collage" not in item[1]:
                     non_paintings += 1
@@ -91,20 +142,26 @@ class Artist():
                     year = None
 
                 img_path = "http://www.the-athenaeum.org/art/" + img_url
+
+                if img_path in existing_urls:
+                    continue
+                else:
+                    existing_urls.add(img_path)
+                
                 local_path = img_dir + img_path.split('/')[-1].split('=')[-1] + ".jpg"
                 if not os.path.isfile(local_path):
                     download_file(img_path)
                     time.sleep(0.2)
                 im = Image.open(local_path)
                 
-                palette = colorgram.extract(im, 20)
+                palette = colorgram.extract(im, 5)
                 palette.sort(key=lambda c: c.hsl.h)
                 self.writeColorsToDatabase(palette, img_path)
 
                 stats = ImageStat.Stat(im)
                 average_color_in_hex = [hex(int(avg_band))[-2:] for avg_band in stats.mean]
                 if len(average_color_in_hex) == 3 and year:
-                    self.artworks.append({"title": title ,"online_file_path" : img_path, "local_thumbnail_url" : local_path, "hex_code" : "".join(average_color_in_hex), "year" : year})
+                    self.artworks.append({"title": title ,"online_image_url" : img_path, "local_image_url" : local_path, "hex_code" : "".join(average_color_in_hex), "year" : year})
                 im.close()
 
     def writeArtistToDatabase(self):
@@ -113,7 +170,8 @@ class Artist():
 
     def writeArtworkToDatabase(self, artwork):
         # print("INSERT INTO Artwork VALUES (\'{}\', \'{}\', \'{}\', \'{}\', \'{}\')".format(artwork.get('hex_code'), artwork.get('online_file_path'), artwork.get('year'), artwork.get('title'), self.name))
-        c.execute("INSERT INTO Artwork VALUES (\'{}\', \'{}\', \'{}\', \'{}\', \'{}\')".format(artwork.get('hex_code'), artwork.get('online_file_path'), artwork.get('year'), artwork.get('title'), self.name))
+        # print(artwork.get("online_image_url"))
+        c.execute("INSERT INTO Artwork VALUES (\'{}\', \'{}\', \'{}\', \'{}\', \'{}\')".format(artwork.get('hex_code'), artwork.get('online_image_url'), artwork.get('year'), artwork.get('title'), self.name))
         # conn.commit()
 
     def writeArtworksToDatabase(self):
@@ -138,7 +196,6 @@ class Artist():
         c.execute("INSERT INTO ArtworkColor VALUES (\'{}\', \'{}\',\'{}\', \'{}\',\'{}\')".format(color.hsl.h, color.hsl.s, color.hsl.l, color.proportion, url))
         Artist.color_db_id += 1
 
-
 class Artwork():
     def __init__(self, url, year, avg_color):
         self.url = url
@@ -146,52 +203,9 @@ class Artwork():
         self.avg_color = avg_color
         self.colors = []
 
-def setupDatabase(db_name):
-    global conn
-    # if os.path.isfile(db_name):
-    #     os.remove(db_name)
-    conn = sqlite3.connect(db_name)
-    global c
-    c = conn.cursor()
-
-    commands = [
-        '''
-        CREATE TABLE IF NOT EXISTS Artwork (
-            hex_code VARCHAR(6),
-            thumbnail_url VARCHAR(61),
-            year VARCHAR(15),
-            title VARCHAR(400),
-            artist_name VARCHAR(30),
-            FOREIGN KEY(artist_name) REFERENCES artist(name),
-            PRIMARY KEY(thumbnail_url)
-        );
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS ArtworkColor (
-            h VARCHAR(3),
-            s VARCHAR(3),
-            l VARCHAR(3),
-            p REAL,
-            artwork_url VARCHAR(61),
-            FOREIGN KEY(artwork_url) REFERENCES artwork(thumbnail_url)
-        );
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS Artist (
-            name VARCHAR(30) NULL
-        );
-        '''
-        ]
-
-    for command in commands:
-        c.execute(command) 
-
-def closeDatabase():
-    conn.close()
-
 if __name__ == "__main__":
     yearRegex = re.compile(r'\(([0-9-]+)\)')
-    img_dir = './thumbnails/'
+    img_dir = './images/'
     session = HTMLSession()
 
     artists = []
@@ -229,7 +243,7 @@ if __name__ == "__main__":
         "DE ZURBARÁN, Francisco"
     ]
 
-    setupDatabase("painters5.db")
+    setupDatabase("artdata.db")
     for name in artist_names:
         artists.append(Artist(name))
         print("finding artwork by {}".format(artists[-1].name))
@@ -237,18 +251,3 @@ if __name__ == "__main__":
         artists[-1].writeToDatabase()
 
     closeDatabase()
-
-    
-
-"""
-for link in links:
-    linked_image_response = session.get("http://www.the-athenaeum.org/art/" + link)
-
-    anchor_tag_to_big_image = list(linked_image_response.html.find('a'))[5]#imgTextHolder > table:nth-child(1) > tbody:nth-child(1) > tr:nth-child(1) > td:nth-child(1) > table:nth-child(1) > tbody:nth-child(1) > tr:nth-child(2) > td:nth-child(1) > a:nth-child(1)', first=True)
-
-    baseurl = "/".join(r.html.base_url.split("/")[:-1])
-    big_image_link = baseurl + "/" + anchor_tag_to_big_image.attrs.get('href')
-    download_file(big_image_link)
-    print(str.format("download success: {}", big_image_link), end='\n')
-    time.sleep(0.1)
-"""
