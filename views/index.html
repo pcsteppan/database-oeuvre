@@ -1,0 +1,63 @@
+<!-- This is a static file -->
+<!-- served from your routes in server.js -->
+
+<!-- You might want to try something fancier: -->
+<!-- html/nunjucks docs: https://mozilla.github.io/nunjucks/ -->
+<!-- pug: https://pugjs.org/ -->
+<!-- haml: http://haml.info/ -->
+<!-- hbs(handlebars): http://handlebarsjs.com/ -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>A Painter's Palette</title>
+    <meta name="description" content="Average palettes of painters over time.">
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- import the webpage's stylesheet -->
+    <link rel="stylesheet" href="/style.css">
+    
+    <!-- import the webpage's client-side javascript file -->
+    <script src="/client.js" defer></script>
+    
+    <style>
+      body{
+        display:grid;
+        grid-template-rows: 5vh 95vh;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="flex items-center justify-center w-100">
+      <form>
+        <select id="artist_select" class="code ttu f7">
+
+        </select>
+      </form>
+    </header>
+
+    <main>
+                                   
+                                   
+      <section style="z-index: 20" class="artworks w-100 h-100">
+        <div id="artworks"  class="list pa0 ma0 flex flex-row h-100 w-100"></div>
+      </section>
+      <section id="preview" style="pointer-events: none;" class="flex justify-center items-center w-100 vh-100 absolute top-0 left-0">
+      </section>
+    </main>
+
+    <!--<footer>
+      Made with <a href="https://glitch.com">Glitch</a>!
+    </footer> -->
+
+    <!-- include the Glitch button to show what the webpage is about and
+          to make it easier for folks to view source and remix -->
+    <!-- Remix Button -->
+    <a href="https://glitch.com/edit/#!/remix/database-oeuvre" class="absolute" style="z-index: 2; top: 0.3rem; right: 0.6rem;">
+      <img src="https://cdn.glitch.com/2bdfb3f8-05ef-4035-a06e-2043962a3a13%2Fremix%402x.png?1513093958726" alt="remix button" aria-label="remix" height="24">
+    </a>
+
+  </body>
+</html>
