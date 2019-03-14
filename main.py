@@ -1,14 +1,59 @@
 from requests_html import HTMLSession
+from peewee import *
 from PIL import Image, ImageStat
-import time, requests, json, re, sqlite3, os.path, unicodedata, colorgram
+import colorgram, os.path, re, requests, sqlite3, time, unicodedata
 
-conn = None
-c = None
-existing_urls = set()
+if os.path.exists('artdata.db'):
+    os.remove('artdata.db')
 
-def download_file(url):
-  local_filename = img_dir + url.split('/')[-1].split('=')[-1] + ".jpg"
-  # NOTE the stream=True parameter
+db = SqliteDatabase('artdata.db', pragmas={
+    'journal_mode':'off',
+    'synchronous' : '0',
+    'locking_mode' : 'exclusive'
+    }) # pragmas in hopes of faster writing time
+catalogue = dict()
+
+# Data Models
+class Artist(Model):
+    name = CharField()
+    url = CharField()
+
+    class Meta:
+        database = db
+
+class Artwork(Model):
+    title = CharField(max_length=100)
+    year = CharField(max_length=9)
+    link = CharField(max_length=100)
+    # size = CharField()
+    artist = ForeignKeyField(Artist, backref='artworks')
+
+    class Meta:
+        database = db
+
+class Color(Model):
+    h = CharField(max_length=3)
+    s = CharField(max_length=3)
+    l = CharField(max_length=3)
+
+    class Meta:
+        indexes = (
+            # create a unique on h/s/l
+            (('h', 's', 'l'), True),
+        )
+        database = db
+
+class ArtworkColor(Model):
+    artwork = ForeignKeyField(Artwork, backref='artworkcolors')
+    color = ForeignKeyField(Color, backref='artworkcolors')
+    p = DecimalField()
+
+    class Meta:
+        primary_key = CompositeKey('artwork', 'color')
+        database = db
+
+
+def download_file(url, local_filename):
   r = requests.get(url, stream=True)
   with open(local_filename, 'wb') as f:
       for chunk in r.iter_content(chunk_size=1024): 
@@ -16,238 +61,120 @@ def download_file(url):
               f.write(chunk)
   return local_filename
 
-def slugify(value, allow_unicode=False):
-  """
-  Convert to ASCII if 'allow_unicode' is False. Convert spaces to hyphens.
-  Remove characters that aren't alphanumerics, underscores, or hyphens.
-  Convert to lowercase. Also strip leading and trailing whitespace.
-  """
-  value = str(value)
-  return value
-  if allow_unicode:
-      value = unicodedata.normalize('NFKC', value)
-  else:
-      value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
-  value = re.sub(r'[^\w\s-]', '', value).strip().lower()
-  return re.sub(r'[-\s]+', '-', value)
+db.connect()
+session = HTMLSession()
 
-def setupDatabase(db_name):
-    global conn
-    if os.path.isfile(db_name):
-        os.remove(db_name)
-    conn = sqlite3.connect(db_name)
-    global c
-    c = conn.cursor()
+artist_names = [
+    "CÉZANNE, Paul",
+    "DELACROIX, Eugène",
+    "BOCCIONI, Umberto",
+    "BRAQUE, Georges",
+    "GAUGUIN, Eugene-Henri Paul",
+    "GOGH, Vincent Willem van",
+    "GORKY, Arshile",
+    "HODLER, Ferdinand",
+    "HOPPER, Edward",
+    "KAHLO, Frida",
+    "KANDINSKY, Wassily",
+    "KIRCHNER, Ernst Ludwig",
+    "KLIMT, Gustav",
+    "MALEVICH, Kasimir Severinovich",
+    "MATISSE, Henri-Émile-Bénoit",
+    "MONDRIAN, Pieter Cornelis",
+    "MONET, Oscar-Claude",
+    "MUNCH, Edvard",
+    "PICASSO, Pablo",
+    "POUSSIN, Nicolas",
+    "Raphael",
+    "RENOIR, Pierre Auguste",
+    "RIJN, Rembrandt van",
+    "ROTHKO, Mark",
+    "ROUSSEAU, Henri",
+    "RUBENS, Peter Paul",
+    "SCHIELE, Egon",
+    "SCHWITTERS, Kurt",
+    "SEURAT, Georges",
+    "TOULOUSE-LAUTREC, Henri de",
+    "DE ZURBARÁN, Francisco"
+]
+
+#acquire list of all people and store in catalogue
+r = session.get("http://www.the-athenaeum.org/art/counts.php?s=au&m=a")
+if os.path.exists("catalog.txt"):
+    with open("catalog.txt", "r", encoding="utf8") as fhand:
+        items = [i.split("::") for i in fhand.readlines()]
+        catalog = {i[0] : i[1] for i in items}
+else:
+    with open("catalog.txt", "w", encoding="utf8") as fhand:
+        catalog = {i.find("td")[0].text : i.find("td>a")[1].absolute_links.pop() for i in r.html.find("tr.r1, tr.r2")}
+        for (k, v) in catalog.items():
+            fhand.write("{}::{}\n".format(k, v))
+
+# iterate through list of people
+Artist.create_table()
+Artwork.create_table()
+Color.create_table()
+ArtworkColor.create_table()
+
+
+
+for artist_name in artist_names:
+    # save people and their artwork listing
+    try:
+        artist = Artist.create(name=artist_name, url=catalog.get(artist_name))
+    except:
+        continue
     
 
-    commands = [
-        '''
-        CREATE TABLE IF NOT EXISTS Artwork (
-            hex_code VARCHAR(6),
-            image_url VARCHAR(61),
-            year VARCHAR(15),
-            title VARCHAR(400),
-            artist_name VARCHAR(30),
-            FOREIGN KEY(artist_name) REFERENCES artist(name),
-            PRIMARY KEY(image_url)
-        );
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS ArtworkColor (
-            h VARCHAR(3),
-            s VARCHAR(3),
-            l VARCHAR(3),
-            p REAL,
-            artwork_url VARCHAR(61),
-            FOREIGN KEY(artwork_url) REFERENCES artwork(image_url)
-        );
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS Artist (
-            name VARCHAR(30) NULL
-        );
-        '''
-        ]
+for artist in Artist.select():
+    time.sleep(0.2)
+    page_n = 1
+    print()
+    temp_artworks = []
+    temp_colors = []
+    temp_artworkcolors = []
+    while True:
+        page_r = session.get(artist.url + "&p=" + str(page_n))
+        page_n += 1
 
-    for command in commands:
-        c.execute(command) 
+        artwork_items = page_r.html.find("tr.r1, tr.r2")
 
-def closeDatabase():
-    conn.close()
+        if len(artwork_items) is 0:
+            break
 
-class Artist():
-    artist_catalogue = ""
-    color_db_id = 0
-    base_url="http://www.the-athenaeum.org"
-    global existing_urls
+        for item_index, artwork_item in enumerate(artwork_items):
+            print("Processing: {}\tPage: {}\tArtwork: {}".format(artist.name, str(page_n-1).zfill(2), str((page_n-2)*100+item_index+1).zfill(4)), end="\r")
+            link = "/".join(artist.url.split("/")[:-1]) + "/" + artwork_item.find("td:nth-child(1) > a:nth-child(1) > img")[0].attrs.get('src')
+            description = artwork_item.find("td:nth-child(2)")[0]
+            title = description.find("div:nth-child(1) > a:nth-child(1)")[0].text
+            year = re.findall(r'\(([0-9-]+)\)', description.text)
+            if not ("Painting" in description.text or "Collage" in description.text):
+                continue
 
-    def __init__(self, name):
-        self.name = name
-        self.url = self.findUrl()
-        self.artworks = []
-
-    def findUrl(self):
-        if Artist.artist_catalogue == "":
-            r = session.get("http://www.the-athenaeum.org/art/counts.php?s=au&m=a")
-            Artist.artist_catalogue = {i.text: i.attrs.get('href') for i in r.html.find("tr > td:nth-child(1) > a:nth-child(1)")}
-            # print(len(Artist.artist_catalogue))
-            
-        r = session.get(self.base_url + Artist.artist_catalogue.get(self.name))
-        # partial css selector works here, whereas full css selector fails
-        artwork_list_a = r.html.find("tr > td > a:nth-child(4)")
-        return artwork_list_a[0].attrs.get("href")
-
-    def addArtwork(self, artwork):
-        self.artworks.append(artwork)
-
-    def acquireArtworks(self):
-        r = session.get(self.base_url + self.url)
-        page_count_element = r.html.find("div.subtitle > a")
-        if page_count_element:
-            page_count = len(page_count_element) + 1
-        else:
-            page_count = 1
-
-        paintings = 0
-        non_paintings = 0
-
-        for p in range(1, page_count):
-            time.sleep(0.2)
-            try:
-                paginated_res = session.get(self.base_url + str.format("{}&p={}", self.url, p))
-            except:
-                print('error on page {} of {}'.format(p, self.name))
+            if len(year) is 1:
+                year = year[0]
+            else:
                 continue
             
-            titles = [title_link.text for title_link in paginated_res.html.find('tr > td:nth-child(2) > div:nth-child(1) > a:nth-child(1)')]
-            images = [img.attrs.get('src') for img in paginated_res.html.find('tr > td:nth-child(1) > a:nth-child(1) > img:nth-child(1)')]
-            descriptions = [description.text for description in paginated_res.html.find('tr > td:nth-child(2)')][1:]
-        
-            for item in zip(images, descriptions, titles):
-                print("page: {}\t{}/{}".format(p, paintings, non_paintings), end="\r")
-                if "Painting" not in item[1] and "Collage" not in item[1]:
-                    non_paintings += 1
-                    continue
-                else:
-                    paintings += 1
-                title = slugify("".join([letter for letter in item[2] if letter is not "'"]))
-                
-                img_url = item[0]
-                img_id = img_url.split('/')[-1].split('=')[-1] + ".jpg"
-                # mo = yearRegex.search(item[1])
-                mo = re.findall(r'\(([0-9-]+)\)', item[1])
-                if mo:
-                    year = mo[0]
-                else:
-                    year = None
+            artwork = Artwork.create(title=title,year=year,artist=artist,link=link)
+            # artwork.save()
+            temp_artworks.append(artwork)
 
-                img_path = "http://www.the-athenaeum.org/art/" + img_url
+            local_path = "images/{}.jpg".format(link.split("=")[-1])
+            if not os.path.exists(local_path):
+                download_file(link, local_path)
+                time.sleep(0.2)
+            
+            im = Image.open(local_path)
+            palette = colorgram.extract(im, 10)
+            im.close()
 
-                if img_path in existing_urls:
-                    continue
-                else:
-                    existing_urls.add(img_path)
-                
-                local_path = img_dir + img_path.split('/')[-1].split('=')[-1] + ".jpg"
-                if not os.path.isfile(local_path):
-                    download_file(img_path)
-                    time.sleep(0.2)
-                im = Image.open(local_path)
-                
-                palette = colorgram.extract(im, 5)
-                palette.sort(key=lambda c: c.hsl.h)
-                self.writeColorsToDatabase(palette, img_path)
-
-                stats = ImageStat.Stat(im)
-                average_color_in_hex = [hex(int(avg_band))[-2:] for avg_band in stats.mean]
-                if len(average_color_in_hex) == 3 and year:
-                    self.artworks.append({"title": title ,"online_image_url" : img_path, "local_image_url" : local_path, "hex_code" : "".join(average_color_in_hex), "year" : year})
-                im.close()
-
-    def writeArtistToDatabase(self):
-        c.execute("INSERT INTO Artist VALUES (\'{}\')".format(self.name))
-        conn.commit()
-
-    def writeArtworkToDatabase(self, artwork):
-        # print("INSERT INTO Artwork VALUES (\'{}\', \'{}\', \'{}\', \'{}\', \'{}\')".format(artwork.get('hex_code'), artwork.get('online_file_path'), artwork.get('year'), artwork.get('title'), self.name))
-        # print(artwork.get("online_image_url"))
-        c.execute("INSERT INTO Artwork VALUES (\'{}\', \'{}\', \'{}\', \'{}\', \'{}\')".format(artwork.get('hex_code'), artwork.get('online_image_url'), artwork.get('year'), artwork.get('title'), self.name))
-        # conn.commit()
-
-    def writeArtworksToDatabase(self):
-        print("Writing {} by {} to database.".format(len(self.artworks), self.name))
-        for artwork in self.artworks:
-            self.writeArtworkToDatabase(artwork)
-        conn.commit()
-    
-    def writeToDatabase(self):
-        self.writeArtistToDatabase()
-        self.writeArtworksToDatabase()
-    
-    def writeColorsToDatabase(self, colors, url):
-        for color in colors:
-            self.writeColorToDatabase(color, url)
-        # print("INSERT INTO ArtworkColor VALUES (\'{}\', \'{}\')".format(Artist.color_db_id, url))
-        # conn.commit()
-    
-    def writeColorToDatabase(self, color, url):
-        # print("INSERT INTO Color VALUES (\'{}\', \'{}\', \'{}\', \'{}\')".format(color.hsl.h, color.hsl.s, color.hsl.l, Artist.color_db_id))
-        # c.execute("INSERT INTO Color VALUES (\'{}\', \'{}\', \'{}\', \'{}\', \'{}\')".format(, Artist.color_db_id))
-        c.execute("INSERT INTO ArtworkColor VALUES (\'{}\', \'{}\',\'{}\', \'{}\',\'{}\')".format(color.hsl.h, color.hsl.s, color.hsl.l, color.proportion, url))
-        Artist.color_db_id += 1
-
-class Artwork():
-    def __init__(self, url, year, avg_color):
-        self.url = url
-        self.year = year
-        self.avg_color = avg_color
-        self.colors = []
-
-if __name__ == "__main__":
-    yearRegex = re.compile(r'\(([0-9-]+)\)')
-    img_dir = './images/'
-    session = HTMLSession()
-
-    artists = []
-    artist_names = [
-        "BOCCIONI, Umberto",
-        "BRAQUE, Georges",
-        "CÉZANNE, Paul",
-        "DELACROIX, Eugène",
-        "GAUGUIN, Eugene-Henri Paul",
-        "GOGH, Vincent Willem van",
-        "GORKY, Arshile",
-        "HODLER, Ferdinand",
-        "HOPPER, Edward",
-        "KAHLO, Frida",
-        "KANDINSKY, Wassily",
-        "KIRCHNER, Ernst Ludwig",
-        "KLIMT, Gustav",
-        "MALEVICH, Kasimir Severinovich",
-        "MATISSE, Henri-Émile-Bénoit",
-        "MONDRIAN, Pieter Cornelis",
-        "MONET, Oscar-Claude",
-        "MUNCH, Edvard",
-        "PICASSO, Pablo",
-        "POUSSIN, Nicolas",
-        "Raphael",
-        "RENOIR, Pierre Auguste",
-        "RIJN, Rembrandt van",
-        "ROTHKO, Mark",
-        "ROUSSEAU, Henri",
-        "RUBENS, Peter Paul",
-        "SCHIELE, Egon",
-        "SCHWITTERS, Kurt",
-        "SEURAT, Georges",
-        "TOULOUSE-LAUTREC, Henri de",
-        "DE ZURBARÁN, Francisco"
-    ]
-
-    setupDatabase("artdata.db")
-    for name in artist_names:
-        artists.append(Artist(name))
-        print("finding artwork by {}".format(artists[-1].name))
-        artists[-1].acquireArtworks()
-        artists[-1].writeToDatabase()
-
-    closeDatabase()
+            # palette.sort(key=lambda c: c.hsl.h)
+            for color in palette:
+                try:
+                    my_color = Color.create(h=color.hsl.h, s=color.hsl.s, l=color.hsl.l)
+                except:
+                    my_color = Color.get(Color.h==color.hsl.h, Color.s==color.hsl.s, Color.l==color.hsl.l)
+                my_color_join = ArtworkColor.create(artwork=artwork, color=my_color, p=color.proportion)    
+print()
+db.close()
