@@ -3,17 +3,21 @@ from peewee import *
 from PIL import Image, ImageStat
 import colorgram, os.path, re, requests, sqlite3, time, unicodedata
 
-if os.path.exists('artdata.db'):
-    os.remove('artdata.db')
+# WARNING: script removes and refreshes db every ti
+database_number = 1
+while os.path.exists('artdata{}.db'.format(database_number)):
+    database_number += 1
+database_filename = 'artdata{}.db'.format(database_number)
 
-db = SqliteDatabase('artdata.db', pragmas={
+# Database Instantiation
+db = SqliteDatabase(database_filename, pragmas={
     'journal_mode':'off',
     'synchronous' : '0',
     'locking_mode' : 'exclusive'
     }) # pragmas in hopes of faster writing time
 catalogue = dict()
 
-# Data Models
+# Declare Data Models
 class Artist(Model):
     name = CharField()
     url = CharField()
@@ -52,7 +56,15 @@ class ArtworkColor(Model):
         primary_key = CompositeKey('artwork', 'color')
         database = db
 
+# Instanitate Data Models as Tables
 
+db.connect()
+Artist.create_table()
+Artwork.create_table()
+Color.create_table()
+ArtworkColor.create_table()
+
+# Global variables
 def download_file(url, local_filename):
   r = requests.get(url, stream=True)
   with open(local_filename, 'wb') as f:
@@ -60,9 +72,6 @@ def download_file(url, local_filename):
           if chunk: # filter out keep-alive new chunks
               f.write(chunk)
   return local_filename
-
-db.connect()
-session = HTMLSession()
 
 artist_names = [
     "CÉZANNE, Paul",
@@ -98,7 +107,9 @@ artist_names = [
     "DE ZURBARÁN, Francisco"
 ]
 
-#acquire list of all people and store in catalogue
+max_len_artist_name = max([len(a) for a in artist_names])
+
+session = HTMLSession()
 r = session.get("http://www.the-athenaeum.org/art/counts.php?s=au&m=a")
 if os.path.exists("catalog.txt"):
     with open("catalog.txt", "r", encoding="utf8") as fhand:
@@ -110,31 +121,22 @@ else:
         for (k, v) in catalog.items():
             fhand.write("{}::{}\n".format(k, v))
 
-# iterate through list of people
-Artist.create_table()
-Artwork.create_table()
-Color.create_table()
-ArtworkColor.create_table()
-
-
-
 for artist_name in artist_names:
-    # save people and their artwork listing
     try:
         artist = Artist.create(name=artist_name, url=catalog.get(artist_name))
     except:
         continue
-    
 
 for artist in Artist.select():
-    time.sleep(0.2)
     page_n = 1
     print()
-    temp_artworks = []
-    temp_colors = []
-    temp_artworkcolors = []
     while True:
-        page_r = session.get(artist.url + "&p=" + str(page_n))
+        while True:
+            try:
+                page_r = session.get(artist.url + "&p=" + str(page_n))
+                break
+            except:
+                continue
         page_n += 1
 
         artwork_items = page_r.html.find("tr.r1, tr.r2")
@@ -143,7 +145,7 @@ for artist in Artist.select():
             break
 
         for item_index, artwork_item in enumerate(artwork_items):
-            print("Processing: {}\tPage: {}\tArtwork: {}".format(artist.name, str(page_n-1).zfill(2), str((page_n-2)*100+item_index+1).zfill(4)), end="\r")
+            print("Processing: {}".format(artist.name).rjust(max_len_artist_name + len("Processing: ")) + " – Artwork: {}".format(str((page_n-2)*100+item_index+1).zfill(4)), end="\r")
             link = "/".join(artist.url.split("/")[:-1]) + "/" + artwork_item.find("td:nth-child(1) > a:nth-child(1) > img")[0].attrs.get('src')
             description = artwork_item.find("td:nth-child(2)")[0]
             title = description.find("div:nth-child(1) > a:nth-child(1)")[0].text
@@ -157,8 +159,6 @@ for artist in Artist.select():
                 continue
             
             artwork = Artwork.create(title=title,year=year,artist=artist,link=link)
-            # artwork.save()
-            temp_artworks.append(artwork)
 
             local_path = "images/{}.jpg".format(link.split("=")[-1])
             if not os.path.exists(local_path):
@@ -166,7 +166,8 @@ for artist in Artist.select():
                 time.sleep(0.2)
             
             im = Image.open(local_path)
-            palette = colorgram.extract(im, 10)
+            colors_to_extract = 100
+            palette = colorgram.extract(im, colors_to_extract)
             im.close()
 
             # palette.sort(key=lambda c: c.hsl.h)
