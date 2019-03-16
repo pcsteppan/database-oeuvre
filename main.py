@@ -4,10 +4,10 @@ from PIL import Image, ImageStat
 import colorgram, os.path, re, requests, sqlite3, time, unicodedata
 
 # WARNING: script removes and refreshes db every ti
-database_number = 1
-while os.path.exists('artdata{}.db'.format(database_number)):
-    database_number += 1
-database_filename = 'artdata{}.db'.format(database_number)
+# database_number = 2
+# while os.path.exists('artdata{}.db'.format(database_number)):
+#     database_number += 1
+database_filename = 'artdata.db'
 
 # Database Instantiation
 db = SqliteDatabase(database_filename, pragmas={
@@ -74,6 +74,7 @@ def download_file(url, local_filename):
   return local_filename
 
 artist_names = [
+    "GOYA Y LUCIENTES DE, Francisco José",
     "CÉZANNE, Paul",
     "DELACROIX, Eugène",
     "BOCCIONI, Umberto",
@@ -166,7 +167,7 @@ for artist in Artist.select():
                 time.sleep(0.2)
             
             im = Image.open(local_path)
-            colors_to_extract = 100
+            colors_to_extract = 5
             palette = colorgram.extract(im, colors_to_extract)
             im.close()
 
