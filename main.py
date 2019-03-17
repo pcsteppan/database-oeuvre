@@ -74,22 +74,28 @@ def download_file(url, local_filename):
   return local_filename
 
 artist_names = [
-    "GOYA Y LUCIENTES DE, Francisco José",
-    "CÉZANNE, Paul",
-    "DELACROIX, Eugène",
     "BOCCIONI, Umberto",
     "BRAQUE, Georges",
+    "CÉZANNE, Paul",
+    "DAVIS, Stuart",
+    "DE ZURBARÁN, Francisco"
+    "DELACROIX, Eugène",
+    "DERAIN, André",
     "GAUGUIN, Eugene-Henri Paul",
     "GOGH, Vincent Willem van",
     "GORKY, Arshile",
+    "GOYA Y LUCIENTES DE, Francisco José",
     "HODLER, Ferdinand",
+    "HOMER, Winslow",
     "HOPPER, Edward",
     "KAHLO, Frida",
     "KANDINSKY, Wassily",
     "KIRCHNER, Ernst Ludwig",
     "KLIMT, Gustav",
     "MALEVICH, Kasimir Severinovich",
+    "Marie Laurencin",
     "MATISSE, Henri-Émile-Bénoit",
+    "MOHOLY-NAGY, László",
     "MONDRIAN, Pieter Cornelis",
     "MONET, Oscar-Claude",
     "MUNCH, Edvard",
@@ -101,11 +107,13 @@ artist_names = [
     "ROTHKO, Mark",
     "ROUSSEAU, Henri",
     "RUBENS, Peter Paul",
+    "Salvador Dalì",
+    "SARGENT, John Singer",
     "SCHIELE, Egon",
     "SCHWITTERS, Kurt",
     "SEURAT, Georges",
     "TOULOUSE-LAUTREC, Henri de",
-    "DE ZURBARÁN, Francisco"
+    "WHISTLER, James Abbott McNeill",
 ]
 
 max_len_artist_name = max([len(a) for a in artist_names])
