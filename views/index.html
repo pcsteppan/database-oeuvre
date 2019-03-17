@@ -10,8 +10,8 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>A Painter's Palette</title>
-    <meta name="description" content="Average palettes of painters over time.">
+    <title>Database Oeuvre</title>
+    <meta name="description" content="Data forms of paintings online.">
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,39 +25,40 @@
     <style>
       body{
         display:grid;
-        grid-template-rows: 5vh 95vh;
+        grid-template-rows: 5vh 90vh 5vh;
       }
     </style>
   </head>
-  <body>
-    <header class="flex items-center justify-center w-100">
-      <form>
-        <select id="artist_select" class="code ttu f7">
-
-        </select>
-      </form>
+  <body style="width:100vw">
+    <header style="margin:0 2.5vw;width:95vw;" class="flex items-center justify-between">
+      <select id="input-select" class="code ttu f7 w-50 w-25-ns"></select>
+      <input type="range" min="1" max="50" step="1" value="6" id="input-range" class="w-50 w-25-ns">
     </header>
 
-    <main>
-                                   
-                                   
-      <section style="z-index: 20" class="artworks w-100 h-100">
-        <div id="artworks"  class="list pa0 ma0 flex flex-row h-100 w-100"></div>
+    <main>                    
+      <section style="z-index: 20" class="artworks w-100 h-100 flex items-center justify-center">
+        <div id="artworks" style="height:90vh;width:95vw;overflow-x:scroll;" class="list pa0 ma0 flex flex-row"></div>
       </section>
       <section id="preview" style="pointer-events: none;" class="flex justify-center items-center w-100 vh-100 absolute top-0 left-0">
       </section>
     </main>
 
-    <!--<footer>
-      Made with <a href="https://glitch.com">Glitch</a>!
-    </footer> -->
-
-    <!-- include the Glitch button to show what the webpage is about and
-          to make it easier for folks to view source and remix -->
-    <!-- Remix Button -->
-    <a href="https://glitch.com/edit/#!/remix/database-oeuvre" class="absolute" style="z-index: 2; top: 0.3rem; right: 0.6rem;">
-      <img src="https://cdn.glitch.com/2bdfb3f8-05ef-4035-a06e-2043962a3a13%2Fremix%402x.png?1513093958726" alt="remix button" aria-label="remix" height="24">
-    </a>
+<footer class="w-100 flex justify-center items-center">
+      <ul style="width: 95%">
+        <li class="item underline gray sans-serif f7 dib w-25 fl">
+          <button id="year" class="dark-gray bg-white b pa1 bw0 pr3 bl dim ttl small-caps">year</button>
+        </li>
+        <li class="item underline gray sans-serif f7 dib w-25 fl">
+          <button id="hue" class="dark-gray bg-white b pa1 pr3 bw0 bl dim b-dark-gray ttl small-caps">hue</button>
+        </li>
+        <li class="item underline gray sans-serif f7 dib w-25 fl">
+          <button id="saturation" class="dark-gray bg-white b pa1 pr3 bw0 bl dim b-dark-gray ttl small-caps">saturation</button>
+        </li>
+        <li class="item underline gray sans-serif f7 dib w-25 fl">
+          <button id="lightness" class="dark-gray bg-white b pa1 pr3 bw0 bl dim b-darkgray ttl small-caps">lightness</button>
+        </li>
+      </ul>
+    </footer>
 
   </body>
 </html>
